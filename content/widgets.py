@@ -6,6 +6,8 @@ import ipywidgets as ipw
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
+from ticker import TickerData
+from ipyflex import FlexLayout
 
 v.theme.dark = True
 import re
@@ -48,13 +50,19 @@ def new_factory(news: List[Dict]) -> v.Html:
     return v.Html(tag="div", class_="d-flex flex-column", children=children)
 
 
-def financial_info_factory(data: List[Dict], logo_url: str = None) -> v.Html:
+def financial_info_factory(data: List[Dict], ticker_name: str = None) -> v.Html:
     children = []
-    if logo_url is not None:
+    if ticker_name is not None:
         logo = v.Card(
             outlined=True,
             class_="ma-1",
-            children=[v.Img(src=logo_url, height="100px", contain=True)],
+            children=[
+                v.CardTitle(
+                    primary_title=True,
+                    children=[ticker_name],
+                    style_="font-size: 30px; color: #51ef98; justify-content: center",
+                ),
+            ],
             style_="width: calc(14.28% - 8px); min-width: 150px",
         )
         children.append(logo)
@@ -86,7 +94,10 @@ def price_chart_factory(df: List, ticker: str = "") -> ipw.Widget:
     # Create figure with secondary y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     keys = df["Open"].keys()
-    index = [datetime.fromtimestamp(int(timestamp) / 1000).strftime("%Y-%m-%d") for timestamp in keys]
+    index = [
+        datetime.fromtimestamp(int(timestamp) / 1000).strftime("%Y-%m-%d")
+        for timestamp in keys
+    ]
     openData = list(df["Open"].values())
     highData = list(df["High"].values())
     lowData = list(df["Low"].values())
@@ -132,7 +143,10 @@ def price_chart_factory(df: List, ticker: str = "") -> ipw.Widget:
 
 def price_history_factory(df: List, ticker: str = "") -> ipw.Widget:
     keys = df["Close"].keys()
-    index = [datetime.fromtimestamp(int(timestamp) / 1000).strftime("%Y-%m-%d") for timestamp in keys]
+    index = [
+        datetime.fromtimestamp(int(timestamp) / 1000).strftime("%Y-%m-%d")
+        for timestamp in keys
+    ]
     closeData = list(df["Close"].values())
     widget = go.FigureWidget(go.Scatter(x=index, y=closeData))
     widget.update_layout(
@@ -215,3 +229,37 @@ def analysis_factory(df) -> ipw.Widget:
         headers=headers,
         items=items,
     )
+
+
+def dashboard_factory(ticker_name: str):
+    ticker = TickerData(ticker_name)
+    editable = True
+    height = "calc(100vh - 130px)"
+    w = FlexLayout(
+        style={"height": height},
+        header={
+            "title": "STOCK DASHBOAD",
+            "style": {"backgroundColor": "rgb(53 53 53)"},
+            "buttons": ["export", "import"],
+        },
+        template="ticker2.json",
+        editable=editable,
+    )
+    style = ipw.HTML("""<style>.js-plotly-plot {height: 100%;}</style> """)
+    news = new_factory(ticker.news)
+    info = financial_info_factory(ticker.financial_info, ticker_name)
+    price = price_chart_factory(ticker.price_sixm, ticker_name)
+    history = price_history_factory(ticker.price_threey, ticker_name)
+    summary = text_widget("Business Summary ", ticker.info["longBusinessSummary"])
+    balance_sheet = balance_sheet_factory(list(ticker.balance_sheet.values()))
+    widgets = {
+        "news": news,
+        "info": info,
+        "price": price,
+        "history": history,
+        "summary": summary,
+        "balance_sheet": balance_sheet,
+    }
+    for key, value in widgets.items():
+        w.add(key, value)
+    return ipw.VBox([w, style])
